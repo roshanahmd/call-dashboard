@@ -31,13 +31,14 @@ li small{color:var(--mu)}.st{font-weight:600}
 <span><select id="range"><option value="1">Today</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select>
 <button id="out">Log out</button></span></div>
 <div class="grid" id="cards"></div>
+<h2>Check-ins</h2><p id="last"></p><ul id="chk"></ul>
 <h2>Missed or rejected, not called back</h2><ul id="pend"></ul>
 <h2>Latest calls</h2><ul id="list"></ul>
 </section>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {getFirestore,collection,query,where,orderBy,getDocs} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,collection,query,where,orderBy,limit,getDocs} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 // Paste your Firebase web app config here
 const cfg={apiKey:"AIzaSyDRBf7UwhlTFAqLnvsgk4scS0mbKiHmXig",authDomain:"court-calls.firebaseapp.com",projectId:"court-calls",appId:"1:115117771252:web:02596ba333c1878d85d1a1"};
 const app=initializeApp(cfg),auth=getAuth(app),db=getFirestore(app),$=id=>document.getElementById(id);
@@ -52,9 +53,19 @@ $("go").onclick=async()=>{$("err").textContent="";
 $("out").onclick=()=>signOut(auth);
 $("range").onchange=load;
 onAuthStateChanged(auth,u=>{$("login").hidden=!!u;$("app").hidden=!u;if(u)load()});
+async function checkins(s){
+ try{
+  const l=await getDocs(query(collection(db,"checkins"),orderBy("time","desc"),limit(1)));
+  const t=l.docs.length?l.docs[0].data().time:0,m=Math.round((Date.now()-t)/6e4);
+  $("last").innerHTML=t?`Last check-in: <b class="${m>70?"missed":"answered"}">${fmt(t)} (${m<60?m+" min":Math.floor(m/60)+" h "+m%60+" min"} ago)</b>`:"No check-ins yet.";
+  const r=(await getDocs(query(collection(db,"checkins"),where("time",">=",s),orderBy("time","desc")))).docs.map(x=>x.data());
+  $("chk").innerHTML=r.map(c=>`<li><span>${fmt(c.time)}</span><small>${esc(c.email||"")}</small></li>`).join("")||"<li>No check-ins in this period.</li>";
+ }catch(e){$("last").textContent="Could not load check-ins."}
+}
 async function load(){
  const d=new Date();d.setHours(0,0,0,0);
  const s=d.getTime()-($("range").value-1)*864e5;
+ checkins(s);
  let rows;
  try{rows=(await getDocs(query(collection(db,"calls"),where("date",">=",s),orderBy("date","asc")))).docs.map(x=>x.data())}
  catch(e){$("cards").innerHTML='<p class="card">Could not load calls. This account may not have read access.</p>';return}
