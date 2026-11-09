@@ -23,6 +23,7 @@ ul{list-style:none;margin:0;padding:0}li{display:flex;justify-content:space-betw
 li small,h3 small{color:var(--mu)}.st{font-weight:600}
 .call{display:inline-block;margin-top:4px;padding:4px 14px;border:1px solid var(--ok);border-radius:6px;color:var(--ok);text-decoration:none;font-weight:600}
 li>span:last-child{text-align:right}
+.dup{opacity:.45}
 .answered,.outgoing{color:var(--ok)}.missed,.rejected{color:var(--bad)}
 #err{color:var(--bad);min-height:1.4em}[hidden]{display:none}
 </style></head><body>
@@ -109,6 +110,10 @@ async function calls(){
    <div class="card"><b>${n.out+n.out0}</b><span>Outgoing (${n.out0} not connected)</span></div>`;
  const p=[...pend.values()].reverse();
  $("pend").innerHTML=p.length?p.map(r=>`<li><span>${who(r)}<br><small>${esc(r.number)}</small></span><span><span class="st ${r.status}">${r.status}</span><br><small>${fmt(r.date)}</small><br>${tel(r)}</span></li>`).join(""):"<li>Everyone has been called back.</li>";
- $("list").innerHTML=rows.slice(-100).reverse().map(r=>`<li><span>${who(r)}<br><small>${fmt(r.date)}${r.duration?" \u00b7 "+dur(r.duration):""}</small></span><span><span class="st ${r.status}">${r.status}</span><br>${tel(r)}</span></li>`).join("")||"<li>No calls in this period.</li>";
+ const L=rows.slice(-100).reverse(),same=(a,b)=>b&&key(a.number)===key(b.number)&&a.status===b.status;
+ $("list").innerHTML=L.map((r,i)=>{
+  const dup=same(r,L[i-1]);let n=1;
+  if(!dup)for(let k=i+1;k<L.length&&same(r,L[k]);k++)n++;
+  return `<li${dup?' class="dup"':''}><span>${who(r)}<br><small>${fmt(r.date)}${r.duration?" \u00b7 "+dur(r.duration):""}</small></span><span><span class="st ${r.status}">${r.status}${n>1?" \u00d7"+n:""}</span><br>${tel(r)}</span></li>`}).join("")||"<li>No calls in this period.</li>";
 }
 </script></body></html>
