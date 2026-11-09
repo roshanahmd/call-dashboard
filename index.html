@@ -21,6 +21,8 @@ button{cursor:pointer}input{width:100%;margin-bottom:8px}
 .ok b{color:var(--ok)}.bad b{color:var(--bad)}.warn b{color:var(--warn)}
 ul{list-style:none;margin:0;padding:0}li{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--ln)}
 li small,h3 small{color:var(--mu)}.st{font-weight:600}
+.call{display:inline-block;margin-top:4px;padding:4px 14px;border:1px solid var(--ok);border-radius:6px;color:var(--ok);text-decoration:none;font-weight:600}
+li>span:last-child{text-align:right}
 .answered,.outgoing{color:var(--ok)}.missed,.rejected{color:var(--bad)}
 #err{color:var(--bad);min-height:1.4em}[hidden]{display:none}
 </style></head><body>
@@ -54,6 +56,7 @@ const key=n=>(n||"").replace(/\D/g,"").slice(-9)||n;
 const fmt=t=>new Date(t).toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
 const tm=t=>new Date(t).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
 const dur=s=>s>=60?Math.floor(s/60)+" min "+(s%60)+" sec":s+" sec";
+const tel=r=>{const n=(r.number||"").replace(/[^\d+]/g,"");return n?`<a class="call" href="tel:${n}">Call</a>`:""};
 const who=r=>esc(r.name||r.number||"Unknown");
 const ago=t=>{const m=Math.round((Date.now()-t)/6e4);return m<60?m+" min":Math.floor(m/60)+" h "+m%60+" min"};
 const cls=(t,lim)=>(Date.now()-t)/6e4>lim?"missed":"answered";
@@ -105,7 +108,7 @@ async function calls(){
    <div class="card warn"><b>${n.rejected}</b><span>Rejected</span></div>
    <div class="card"><b>${n.out+n.out0}</b><span>Outgoing (${n.out0} not connected)</span></div>`;
  const p=[...pend.values()].reverse();
- $("pend").innerHTML=p.length?p.map(r=>`<li><span>${who(r)}<br><small>${esc(r.number)}</small></span><span><span class="st ${r.status}">${r.status}</span><br><small>${fmt(r.date)}</small></span></li>`).join(""):"<li>Everyone has been called back.</li>";
- $("list").innerHTML=rows.slice(-100).reverse().map(r=>`<li><span>${who(r)}<br><small>${fmt(r.date)}${r.duration?" \u00b7 "+dur(r.duration):""}</small></span><span class="st ${r.status}">${r.status}</span></li>`).join("")||"<li>No calls in this period.</li>";
+ $("pend").innerHTML=p.length?p.map(r=>`<li><span>${who(r)}<br><small>${esc(r.number)}</small></span><span><span class="st ${r.status}">${r.status}</span><br><small>${fmt(r.date)}</small><br>${tel(r)}</span></li>`).join(""):"<li>Everyone has been called back.</li>";
+ $("list").innerHTML=rows.slice(-100).reverse().map(r=>`<li><span>${who(r)}<br><small>${fmt(r.date)}${r.duration?" \u00b7 "+dur(r.duration):""}</small></span><span><span class="st ${r.status}">${r.status}</span><br>${tel(r)}</span></li>`).join("")||"<li>No calls in this period.</li>";
 }
 </script></body></html>
