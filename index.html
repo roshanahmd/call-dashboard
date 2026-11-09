@@ -7,16 +7,20 @@
 @media(prefers-color-scheme:dark){:root{--bg:#121714;--card:#1a211d;--tx:#e8eeea;--mu:#9aa8a0;--ln:#2b352f;--ok:#4cc38a;--bad:#ff8a80;--warn:#e3b341}}
 *{box-sizing:border-box}
 body{margin:0 auto;padding:16px;max-width:720px;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,sans-serif}
-h1{font-size:22px;margin:0}h2{font-size:16px;margin:24px 0 8px}
+h1{font-size:22px;margin:0}h2{font-size:16px;margin:24px 0 8px}h3{font-size:15px;margin:20px 0 4px}
+h3 small{font-weight:400;margin-left:6px}
 .bar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+.bar h2{margin:0}
 input,select,button{font:inherit;padding:10px 12px;border:1px solid var(--ln);border-radius:6px;background:var(--card);color:var(--tx)}
 button{cursor:pointer}input{width:100%;margin-bottom:8px}
+.tabs{display:flex;gap:8px;margin:16px 0 4px}.tabs button{flex:1}
+.tabs .on{border-color:var(--tx);font-weight:600}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .card{background:var(--card);border:1px solid var(--ln);border-radius:6px;padding:12px}
-.card b{display:block;font-size:30px;line-height:1.1}.card span{color:var(--mu);font-size:13px}
+.grid .card b{display:block;font-size:30px;line-height:1.1}.card span{color:var(--mu);font-size:13px}
 .ok b{color:var(--ok)}.bad b{color:var(--bad)}.warn b{color:var(--warn)}
 ul{list-style:none;margin:0;padding:0}li{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--ln)}
-li small{color:var(--mu)}.st{font-weight:600}
+li small,h3 small{color:var(--mu)}.st{font-weight:600}
 .answered,.outgoing{color:var(--ok)}.missed,.rejected{color:var(--bad)}
 #err{color:var(--bad);min-height:1.4em}[hidden]{display:none}
 </style></head><body>
@@ -27,45 +31,63 @@ li small{color:var(--mu)}.st{font-weight:600}
 <button id="go">Log in</button><p id="err"></p>
 </section>
 <section id="app" hidden>
-<div class="bar"><h1>Calls</h1>
-<span><select id="range"><option value="1">Today</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select>
-<button id="out">Log out</button></span></div>
+<div class="bar"><h1>Call dashboard</h1><button id="out">Log out</button></div>
+<div id="top" class="card"></div>
+<div class="tabs"><button id="t1" class="on">Calls</button><button id="t2">Check-ins</button></div>
+<div id="v1">
+<div class="bar" style="margin-top:16px"><h2>Calls</h2>
+<select id="range"><option value="1">Today</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select></div>
 <div class="grid" id="cards"></div>
-<h2>Check-ins</h2><p id="last"></p><ul id="chk"></ul>
 <h2>Missed or rejected, not called back</h2><ul id="pend"></ul>
 <h2>Latest calls</h2><ul id="list"></ul>
+</div>
+<div id="v2" hidden><h2>Check-ins by date (last 30 days)</h2><div id="chk"></div></div>
 </section>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {getFirestore,collection,query,where,orderBy,limit,getDocs} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-// Paste your Firebase web app config here
+import {getFirestore,collection,query,where,orderBy,limit,getDocs,doc,getDoc} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 const cfg={apiKey:"AIzaSyDRBf7UwhlTFAqLnvsgk4scS0mbKiHmXig",authDomain:"court-calls.firebaseapp.com",projectId:"court-calls",appId:"1:115117771252:web:02596ba333c1878d85d1a1"};
 const app=initializeApp(cfg),auth=getAuth(app),db=getFirestore(app),$=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const key=n=>(n||"").replace(/\D/g,"").slice(-9)||n;
 const fmt=t=>new Date(t).toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+const tm=t=>new Date(t).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
 const dur=s=>s>=60?Math.floor(s/60)+" min "+(s%60)+" sec":s+" sec";
 const who=r=>esc(r.name||r.number||"Unknown");
+const ago=t=>{const m=Math.round((Date.now()-t)/6e4);return m<60?m+" min":Math.floor(m/60)+" h "+m%60+" min"};
+const cls=(t,lim)=>(Date.now()-t)/6e4>lim?"missed":"answered";
 $("go").onclick=async()=>{$("err").textContent="";
  try{await signInWithEmailAndPassword(auth,$("em").value.trim(),$("pw").value)}
  catch(e){$("err").textContent="Login failed. Check email and password."}};
 $("out").onclick=()=>signOut(auth);
-$("range").onchange=load;
-onAuthStateChanged(auth,u=>{$("login").hidden=!!u;$("app").hidden=!u;if(u)load()});
-async function checkins(s){
+$("range").onchange=calls;
+function tab(n){$("v1").hidden=n!=1;$("v2").hidden=n!=2;$("t1").classList.toggle("on",n==1);$("t2").classList.toggle("on",n==2);if(n==2)chk()}
+$("t1").onclick=()=>tab(1);$("t2").onclick=()=>tab(2);
+onAuthStateChanged(auth,u=>{$("login").hidden=!!u;$("app").hidden=!u;if(u){top();calls();tab(1)}});
+async function top(){
+ let c="No check-ins yet.",s="No sync received yet.";
  try{
   const l=await getDocs(query(collection(db,"checkins"),orderBy("time","desc"),limit(1)));
-  const t=l.docs.length?l.docs[0].data().time:0,m=Math.round((Date.now()-t)/6e4);
-  $("last").innerHTML=t?`Last check-in: <b class="${m>70?"missed":"answered"}">${fmt(t)} (${m<60?m+" min":Math.floor(m/60)+" h "+m%60+" min"} ago)</b>`:"No check-ins yet.";
-  const r=(await getDocs(query(collection(db,"checkins"),where("time",">=",s),orderBy("time","desc")))).docs.map(x=>x.data());
-  $("chk").innerHTML=r.map(c=>`<li><span>${fmt(c.time)}</span><small>${esc(c.email||"")}</small></li>`).join("")||"<li>No check-ins in this period.</li>";
- }catch(e){$("last").textContent="Could not load check-ins."}
+  if(l.docs.length){const t=l.docs[0].data().time;c=`Last check-in: <b class="${cls(t,70)}">${fmt(t)} (${ago(t)} ago)</b>`}
+  const d=await getDoc(doc(db,"status","phone"));
+  if(d.exists()){const x=d.data(),o=x.offsetMinutes||0,a=Math.abs(o);
+   const off="UTC"+(o<0?"-":"+")+Math.floor(a/60)+(a%60?":"+String(a%60).padStart(2,"0"):"");
+   s=`Last synced: <b class="${cls(x.lastSync,45)}">${fmt(x.lastSync)} (${ago(x.lastSync)} ago)</b><br>Phone time zone: ${esc(x.timeZone||"unknown")} (${off})`}
+ }catch(e){c=s="Could not load status."}
+ $("top").innerHTML=c+"<br>"+s;
 }
-async function load(){
+async function chk(){
+ try{
+  const r=(await getDocs(query(collection(db,"checkins"),where("time",">=",Date.now()-30*864e5),orderBy("time","desc")))).docs.map(x=>x.data());
+  const g=new Map();
+  for(const c of r){const k=new Date(c.time).toLocaleDateString([], {weekday:"short",day:"numeric",month:"short",year:"numeric"});if(!g.has(k))g.set(k,[]);g.get(k).push(c)}
+  $("chk").innerHTML=[...g].map(([k,a])=>`<h3>${esc(k)} <small>${a.length} check-in${a.length>1?"s":""}</small></h3><ul>${a.map(c=>`<li><span>${tm(c.time)}</span><small>${esc(c.tz||"")}</small></li>`).join("")}</ul>`).join("")||"<p>No check-ins in the last 30 days.</p>";
+ }catch(e){$("chk").textContent="Could not load check-ins."}
+}
+async function calls(){
  const d=new Date();d.setHours(0,0,0,0);
  const s=d.getTime()-($("range").value-1)*864e5;
- checkins(s);
  let rows;
  try{rows=(await getDocs(query(collection(db,"calls"),where("date",">=",s),orderBy("date","asc")))).docs.map(x=>x.data())}
  catch(e){$("cards").innerHTML='<p class="card">Could not load calls. This account may not have read access.</p>';return}
@@ -84,6 +106,6 @@ async function load(){
    <div class="card"><b>${n.out+n.out0}</b><span>Outgoing (${n.out0} not connected)</span></div>`;
  const p=[...pend.values()].reverse();
  $("pend").innerHTML=p.length?p.map(r=>`<li><span>${who(r)}<br><small>${esc(r.number)}</small></span><span><span class="st ${r.status}">${r.status}</span><br><small>${fmt(r.date)}</small></span></li>`).join(""):"<li>Everyone has been called back.</li>";
- $("list").innerHTML=rows.slice(-100).reverse().map(r=>`<li><span>${who(r)}<br><small>${fmt(r.date)}${r.duration?" · "+dur(r.duration):""}</small></span><span class="st ${r.status}">${r.status}</span></li>`).join("")||"<li>No calls in this period.</li>";
+ $("list").innerHTML=rows.slice(-100).reverse().map(r=>`<li><span>${who(r)}<br><small>${fmt(r.date)}${r.duration?" \u00b7 "+dur(r.duration):""}</small></span><span class="st ${r.status}">${r.status}</span></li>`).join("")||"<li>No calls in this period.</li>";
 }
 </script></body></html>
